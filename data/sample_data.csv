@@ -1,0 +1,31 @@
+text,sentiment
+"I love this product, it's amazing!",positive
+"This is the worst experience ever.",negative
+"The service was okay, nothing special.",neutral
+"I'm extremely happy with my purchase.",positive
+"The quality was disappointing, I expected better.",negative
+"It works as expected, no problems so far.",neutral
+"I absolutely hate how this performs.",negative
+"Best decision I ever made, highly recommend!",positive
+"The price is reasonable for what you get.",neutral
+"Complete waste of money, avoid at all costs.",negative
+"I'm satisfied with this product.",positive
+"Not impressed but not terrible either.",neutral
+"The customer service was excellent.",positive
+"I regret buying this, total garbage.",negative
+"It's fine, does the job adequately.",neutral
+"I can't believe how good this is!",positive
+"Very disappointed with the result.",negative
+"Average performance, nothing to write home about.",neutral
+"This exceeded all my expectations!",positive
+"Terrible design, confusing interface.",negative
+"The installation was straightforward.",neutral
+"Amazing quality at this price point!",positive
+"Would not recommend to anyone.",negative
+"Nothing special to report, it's adequate.",neutral
+"Life-changing product, worth every penny!",positive
+"Broke after two weeks, don't buy it.",negative
+"Meets basic requirements but that's all.",neutral
+"Great customer support team!",positive
+"So frustrating to use, terrible UI.",negative
+"Neutral opinion overall, has pros and cons.",neutral

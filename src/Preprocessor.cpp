@@ -1,90 +1,93 @@
-#include "Preprocessor.h"
-#include <algorithm> // For std::transform, std::remove_if
-#include <cctype>    // For ::tolower, ::isspace, ::ispunct
-#include <sstream>   // For std::stringstream
-#include <fstream>   // For loading stop words
-#include <iterator>  // For std::istream_iterator
+#include "preprocessor.h"
+#include <algorithm>
+#include <cctype>
+#include <sstream>
+#include <regex>
 
-namespace sentiment
-{
+namespace sentiment {
 
-Preprocessor::Preprocessor() : remove_stop_words_(false) {
-    // Initialize with a small, common English stop word list if desired
-    // Or rely solely on loading from file via loadStopWords()
-     stop_words_ = {"a", "an", "the", "in", "on", "at", "to", "for", "is",
-                    "am", "are", "was", "were", "i", "you", "he", "she",
-                    "it", "we", "they", "and", "or", "but", "so", "this",
-                    "that", "these", "those", "my", "your", "his", "her",
-                    "its", "our", "their"};
+Preprocessor::Preprocessor(bool useStopWords) : useStopWords(useStopWords) {
+    if (useStopWords) {
+        initializeStopWords();
+    }
 }
 
-std::string Preprocessor::toLower(const std::string& text) const {
-    std::string lower_text = text;
-    std::transform(lower_text.begin(), lower_text.end(), lower_text.begin(),
-                   [](unsigned char c){ return std::tolower(c); });
-    return lower_text;
-}
+std::string Preprocessor::cleanText(const std::string& text) const {
+    // Convert to lowercase
+    std::string cleanedText = text;
+    std::transform(cleanedText.begin(), cleanedText.end(),
+                  cleanedText.begin(), ::tolower);
 
-std::string Preprocessor::removePunctuation(const std::string& text) const {
-    std::string no_punct_text;
-    std::copy_if(text.begin(), text.end(), std::back_inserter(no_punct_text),
-                 [](unsigned char c){ return !std::ispunct(c); });
-    return no_punct_text;
+    // Replace punctuation with spaces
+    std::regex punctRegex("[\\!\\\"\\#\\$\\%\\&\\'\\(\\)\\*\\+\\,\\-\\.\\/\\:\\;\\<\\=\\>\\?\\@\\[\\\\\\]\\^_\\`\\{\\|\\}\\~]");
+    cleanedText = std::regex_replace(cleanedText, punctRegex, " ");
+
+    // Replace multiple spaces with a single space
+    std::regex multipleSpacesRegex("\\s+");
+    cleanedText = std::regex_replace(cleanedText, multipleSpacesRegex, " ");
+
+    // Trim leading and trailing spaces
+    cleanedText = std::regex_replace(cleanedText, std::regex("^\\s+|\\s+$"), "");
+
+    return cleanedText;
 }
 
 std::vector<std::string> Preprocessor::tokenize(const std::string& text) const {
-    std::stringstream ss(text);
-    std::string word;
     std::vector<std::string> tokens;
-    while (ss >> word) { // Splits by whitespace
-        tokens.push_back(word);
+    std::istringstream iss(text);
+    std::string token;
+
+    while (iss >> token) {
+        // Skip stop words if enabled
+        if (useStopWords && isStopWord(token)) {
+            continue;
+        }
+
+        tokens.push_back(token);
     }
+
     return tokens;
 }
 
-void Preprocessor::setStopWordRemoval(bool remove) {
-    remove_stop_words_ = remove;
+std::vector<std::string> Preprocessor::preprocess(const std::string& text) const {
+    return tokenize(cleanText(text));
 }
 
-bool Preprocessor::loadStopWords(const std::string& filepath) {
-    std::ifstream file(filepath);
-    if (!file.is_open()) {
-        return false; // Indicate failure
+void Preprocessor::addStopWords(const std::vector<std::string>& words) {
+    for (const auto& word : words) {
+        stopWords.insert(word);
     }
-    stop_words_.clear(); // Clear existing stop words
-    std::string word;
-    while (file >> word) {
-        stop_words_.insert(toLower(word)); // Store stop words in lowercase
-    }
-    file.close();
-    return true;
 }
 
-
-std::vector<std::string> Preprocessor::process(const std::string& text) const {
-    // 1. Convert to lowercase
-    std::string current_text = toLower(text);
-
-    // 2. Remove punctuation
-    current_text = removePunctuation(current_text);
-
-    // 3. Tokenize
-    std::vector<std::string> tokens = tokenize(current_text);
-
-    // 4. (Optional) Remove stop words
-    if (remove_stop_words_) {
-        std::vector<std::string> filtered_tokens;
-        for (const auto& token : tokens) {
-            if (stop_words_.find(token) == stop_words_.end()) {
-                // Keep token if it's NOT in the stop word list
-                filtered_tokens.push_back(token);
-            }
-        }
-        return filtered_tokens; // Return the filtered list
-    }
-
-    return tokens; // Return tokens without stop word removal
+bool Preprocessor::isStopWord(const std::string& word) const {
+    return stopWords.find(word) != stopWords.end();
 }
 
+void Preprocessor::initializeStopWords() {
+    // Common English stop words
+    const std::vector<std::string> defaultStopWords = {
+        "a", "about", "above", "after", "again", "against", "all", "am", "an", "and",
+        "any", "are", "aren't", "as", "at", "be", "because", "been", "before", "being",
+        "below", "between", "both", "but", "by", "can't", "cannot", "could", "couldn't",
+        "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down", "during",
+        "each", "few", "for", "from", "further", "had", "hadn't", "has", "hasn't",
+        "have", "haven't", "having", "he", "he'd", "he'll", "he's", "her", "here",
+        "here's", "hers", "herself", "him", "himself", "his", "how", "how's", "i",
+        "i'd", "i'll", "i'm", "i've", "if", "in", "into", "is", "isn't", "it", "it's",
+        "its", "itself", "let's", "me", "more", "most", "mustn't", "my", "myself",
+        "no", "nor", "not", "of", "off", "on", "once", "only", "or", "other", "ought",
+        "our", "ours", "ourselves", "out", "over", "own", "same", "shan't", "she",
+        "she'd", "she'll", "she's", "should", "shouldn't", "so", "some", "such", "than",
+        "that", "that's", "the", "their", "theirs", "them", "themselves", "then",
+        "there", "there's", "these", "they", "they'd", "they'll", "they're", "they've",
+        "this", "those", "through", "to", "too", "under", "until", "up", "very", "was",
+        "wasn't", "we", "we'd", "we'll", "we're", "we've", "were", "weren't", "what",
+        "what's", "when", "when's", "where", "where's", "which", "while", "who",
+        "who's", "whom", "why", "why's", "with", "won't", "would", "wouldn't", "you",
+        "you'd", "you'll", "you're", "you've", "your", "yours", "yourself", "yourselves"
+    };
+
+    stopWords.insert(defaultStopWords.begin(), defaultStopWords.end());
+}
 
 } // namespace sentiment

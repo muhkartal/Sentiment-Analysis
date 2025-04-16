@@ -5,69 +5,70 @@
 #include <vector>
 #include <unordered_set>
 
-namespace sentiment
-{
+namespace sentiment {
 
 /**
- * @brief Performs basic text preprocessing steps.
+ * @brief Class for text preprocessing and tokenization
+ *
+ * This class handles text cleaning, tokenization, and optional
+ * stop word removal for NLP preprocessing.
  */
-class Preprocessor
-{
+class Preprocessor {
 public:
     /**
-     * @brief Default constructor. Initializes default settings.
+     * @brief Constructor with optional stop words
+     * @param useStopWords Whether to remove stop words
      */
-    Preprocessor();
+    explicit Preprocessor(bool useStopWords = true);
 
     /**
-     * @brief Processes a single text string.
+     * @brief Clean and normalize text
      *
-     * Applies lowercase conversion, punctuation removal, and tokenization.
-     * Optionally removes stop words if enabled.
+     * This function:
+     * - Converts text to lowercase
+     * - Removes punctuation
+     * - Normalizes whitespace
      *
-     * @param text The input text string.
-     * @return A vector of processed tokens.
+     * @param text Input text to clean
+     * @return Cleaned text
      */
-    std::vector<std::string> process(const std::string& text) const;
+    std::string cleanText(const std::string& text) const;
 
     /**
-     * @brief Enables or disables stop word removal.
-     * @param remove True to enable, false to disable.
-     */
-    void setStopWordRemoval(bool remove);
-
-    /**
-     * @brief Loads stop words from a file (one word per line).
-     * @param filepath Path to the stop words file.
-     * @return True if loading was successful, false otherwise.
-     */
-    bool loadStopWords(const std::string& filepath);
-
-
-private:
-    /**
-     * @brief Converts a string to lowercase.
-     * @param text Input string.
-     * @return Lowercase string.
-     */
-    std::string toLower(const std::string& text) const;
-
-    /**
-     * @brief Removes punctuation characters from a string.
-     * @param text Input string.
-     * @return String with punctuation removed.
-     */
-    std::string removePunctuation(const std::string& text) const;
-
-    /**
-     * @brief Splits a string into tokens based on whitespace.
-     * @param text Input string.
-     * @return Vector of tokens.
+     * @brief Tokenize text into words
+     * @param text Text to tokenize
+     * @return Vector of tokens (words)
      */
     std::vector<std::string> tokenize(const std::string& text) const;
 
-    bool remove_stop_words_ = false;
-    std::unordered_set<std::string> stop_words_;
+    /**
+     * @brief Clean and tokenize text in one step
+     * @param text Text to preprocess
+     * @return Vector of tokens
+     */
+    std::vector<std::string> preprocess(const std::string& text) const;
+
+    /**
+     * @brief Add custom stop words
+     * @param words Vector of words to add as stop words
+     */
+    void addStopWords(const std::vector<std::string>& words);
+
+    /**
+     * @brief Check if a word is a stop word
+     * @param word Word to check
+     * @return true if the word is a stop word, false otherwise
+     */
+    bool isStopWord(const std::string& word) const;
+
+private:
+    bool useStopWords; ///< Whether to use stop word removal
+    std::unordered_set<std::string> stopWords; ///< Set of stop words
+
+    /**
+     * @brief Initialize default English stop words
+     */
+    void initializeStopWords();
 };
 
 } // namespace sentiment

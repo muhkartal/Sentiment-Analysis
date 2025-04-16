@@ -1,207 +1,216 @@
 #include <iostream>
-#include <vector>
 #include <string>
-#include <random>      // For std::shuffle, std::mt19937, std::random_device
-#include <algorithm>   // For std::shuffle
-#include <numeric>     // For std::iota
-#include <iomanip>     // For std::setprecision
+#include <vector>
+#include <chrono>
+#include <iomanip>
+#include <fstream>
 
-#include "DataLoader.h"
-#include "Preprocessor.h"
-#include "FeatureExtractor.h"
-#include "NaiveBayesClassifier.h"
+#include "data_loader.h"
+#include "preprocessor.h"
+#include "feature_extractor.h"
+#include "naive_bayes.h"
+#include "evaluator.h"
+#include "utils.h"
+
+using namespace sentiment;
+
+// Function to print program header
+void printHeader() {
+    std::cout << "====================================================\n";
+    std::cout << "          C++ Sentiment Analysis Pipeline           \n";
+    std::cout << "====================================================\n";
+}
+
+// Function to print usage information
+void printUsage(const std::string& programName) {
+    std::cout << "Usage: " << programName << " [options]\n";
+    std::cout << "Options:\n";
+    std::cout << "  --file FILE      Path to training data CSV file\n";
+    std::cout << "  --interactive    Enable interactive mode for inference\n";
+    std::cout << "  --help           Display this help message\n";
+}
+
+// Function to parse command line arguments
+std::unordered_map<std::string, std::string> parseArgs(int argc, char* argv[]) {
+    std::unordered_map<std::string, std::string> args;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+
+        if (arg == "--help") {
+            args["help"] = "true";
+        } else if (arg == "--interactive") {
+            args["interactive"] = "true";
+        } else if (arg == "--file" && i + 1 < argc) {
+            args["file"] = argv[++i];
+        } else if (arg.substr(0, 2) == "--") {
+            std::cerr << "Unknown option: " << arg << std::endl;
+        }
+    }
+
+    return args;
+}
+
+// Function for interactive mode
+void runInteractiveMode(
+    const Preprocessor& preprocessor,
+    const FeatureExtractor& featureExtractor,
+    const Model& model
+) {
+    std::cout << "\n--- Interactive Mode ---\n";
+    std::cout << "Enter text to analyze sentiment (type 'exit' to quit):\n";
+
+    std::string input;
+    while (true) {
+        std::cout << "\n> ";
+        std::getline(std::cin, input);
+
+        // Check for exit command
+        if (input == "exit" || input == "quit") {
+            break;
+        }
+
+        // Skip empty input
+        if (input.empty()) {
+            continue;
+        }
+
+        // Extract features and predict
+        std::vector<double> features = featureExtractor.extractFeatures(input);
+        SentimentLabel prediction = model.predict(features);
+
+        // Print prediction
+        std::cout << "Sentiment: " << sentimentToString(prediction) << std::endl;
+    }
+}
+
+// Function to create sample data file if not provided
+std::string createSampleDataFile() {
+    std::string filePath = "data/sample_data.csv";
+    std::ofstream file(filePath);
+
+    if (file.is_open()) {
+        file << "text,sentiment\n";
+        file << "\"I love this product, it's amazing!\",positive\n";
+        file << "\"This is the worst experience ever.\",negative\n";
+        file << "\"The service was okay, nothing special.\",neutral\n";
+        file << "\"I'm extremely happy with my purchase.\",positive\n";
+        file << "\"The quality was disappointing, I expected better.\",negative\n";
+        file << "\"It works as expected, no problems so far.\",neutral\n";
+        file << "\"I absolutely hate how this performs.\",negative\n";
+        file << "\"Best decision I ever made, highly recommend!\",positive\n";
+        file << "\"The price is reasonable for what you get.\",neutral\n";
+        file << "\"Complete waste of money, avoid at all costs.\",negative\n";
+        file << "\"I'm satisfied with this product.\",positive\n";
+        file << "\"Not impressed but not terrible either.\",neutral\n";
+        file << "\"The customer service was excellent.\",positive\n";
+        file << "\"I regret buying this, total garbage.\",negative\n";
+        file << "\"It's fine, does the job adequately.\",neutral\n";
+        file << "\"I can't believe how good this is!\",positive\n";
+        file << "\"Very disappointed with the result.\",negative\n";
+        file << "\"Average performance, nothing to write home about.\",neutral\n";
+        file << "\"This exceeded all my expectations!\",positive\n";
+        file << "\"Terrible design, confusing interface.\",negative\n";
+        file.close();
+
+        std::cout << "Created sample data file: " << filePath << std::endl;
+    } else {
+        std::cerr << "Error: Could not create sample data file" << std::endl;
+        return "";
+    }
+
+    return filePath;
+}
 
 int main(int argc, char* argv[]) {
-    if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " <path_to_data_csv>" << std::endl;
+    printHeader();
+
+    // Parse command line arguments
+    auto args = parseArgs(argc, argv);
+
+    // Check for help flag
+    if (args.count("help") > 0) {
+        printUsage(argv[0]);
+        return 0;
+    }
+
+    // Timer for measuring performance
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    // Initialize file path
+    std::string filePath = args.count("file") > 0 ? args["file"] : "data/sample_data.csv";
+
+    // Create sample data if file doesn't exist
+    std::ifstream fileCheck(filePath);
+    if (!fileCheck.good()) {
+        std::cout << "File not found: " << filePath << std::endl;
+        filePath = createSampleDataFile();
+        if (filePath.empty()) {
+            return 1;
+        }
+    }
+
+    // 1. Data Loading
+    std::cout << "\n--- Step 1: Loading Data ---\n";
+    DataLoader dataLoader;
+    bool loadSuccess = dataLoader.loadFromCSV(filePath);
+    if (!loadSuccess) {
+        std::cerr << "Error: Failed to load data from " << filePath << std::endl;
         return 1;
     }
 
-    std::string data_filepath = argv[1];
+    std::cout << "Loaded " << dataLoader.getData().size() << " examples from "
+              << filePath << std::endl;
 
-    try {
-        // --- 1. Load Data ---
-        std::cout << "Loading data from: " << data_filepath << "..." << std::endl;
-        auto documents = sentiment::DataLoader::loadData(data_filepath);
-        if (documents.empty()) {
-            std::cerr << "Error: No documents loaded. Check data file format and path." << std::endl;
-            return 1;
-        }
-        std::cout << "Loaded " << documents.size() << " documents." << std::endl;
+    // Split data into training and validation sets
+    auto [trainData, validData] = dataLoader.splitTrainValidation(0.8);
+    std::cout << "Split data into " << trainData.size() << " training examples and "
+              << validData.size() << " validation examples" << std::endl;
 
-        // --- 2. Preprocessing ---
-        std::cout << "Preprocessing data..." << std::endl;
-        sentiment::Preprocessor preprocessor;
-        // Optional: Enable stop word removal
-        // preprocessor.setStopWordRemoval(true);
-        // Optional: Load stop words from a file
-        // if (!preprocessor.loadStopWords("path/to/stopwords.txt")) {
-        //     std::cerr << "Warning: Could not load stop words file." << std::endl;
-        // }
+    // 2. Preprocessing and Feature Extraction
+    std::cout << "\n--- Step 2: Preprocessing and Feature Extraction ---\n";
+    Preprocessor preprocessor(true); // Use stop word removal
+    FeatureExtractor featureExtractor(
+        preprocessor,
+        FeatureExtractor::Method::BAG_OF_WORDS
+    );
 
-        std::vector<std::vector<std::string>> all_tokenized_docs;
-        std::vector<std::string> all_labels;
-        all_tokenized_docs.reserve(documents.size());
-        all_labels.reserve(documents.size());
+    // Build vocabulary from training data
+    featureExtractor.buildVocabulary(trainData, 2, 5000);
 
-        for (const auto& doc : documents) {
-            all_tokenized_docs.push_back(preprocessor.process(doc.text));
-            all_labels.push_back(doc.label);
-        }
-        std::cout << "Preprocessing complete." << std::endl;
+    // Transform training and validation data to feature vectors
+    std::vector<FeatureVector> trainFeatures = featureExtractor.batchTransform(trainData);
+    std::vector<FeatureVector> validFeatures = featureExtractor.batchTransform(validData);
 
-        // --- 3. Data Splitting (Train/Validation) ---
-        if (documents.size() < 5) {
-             std::cerr << "Warning: Very small dataset (" << documents.size()
-                       << " docs). Evaluation might not be meaningful. Consider more data." << std::endl;
-             // Handle very small datasets - maybe use all for training or skip validation?
-             // For this example, we'll proceed but results will be unreliable.
-             if (documents.empty()){ return 1; } // Exit if truly empty after warning
-        }
+    std::cout << "Extracted features with vocabulary size: "
+              << featureExtractor.getVocabularySize() << std::endl;
 
-        double train_split_ratio = 0.8;
-        size_t total_samples = documents.size();
-        size_t train_size = static_cast<size_t>(total_samples * train_split_ratio);
-        size_t validation_size = total_samples - train_size;
-
-        if (train_size == 0 || validation_size == 0) {
-             std::cerr << "Error: Dataset too small to create both training and validation sets with ratio "
-                       << train_split_ratio << ". Need at least " << static_cast<int>(1.0/std::min(train_split_ratio, 1.0 - train_split_ratio)) + 1
-                       << " samples." << std::endl;
-             // Decide how to proceed: maybe use all data for training and skip validation?
-             // For now, let's just make validation size at least 1 if possible.
-             if (total_samples > 1) {
-                 train_size = total_samples - 1;
-                 validation_size = 1;
-             } else {
-                  train_size = total_samples; // Use all for training if only 1 sample
-                  validation_size = 0;
-                  std::cout << "Warning: Only 1 sample, using it for training. No validation possible." << std::endl;
-             }
-        }
-
-
-        std::vector<size_t> indices(total_samples);
-        std::iota(indices.begin(), indices.end(), 0); // Fill with 0, 1, 2, ...
-
-        std::random_device rd;
-        std::mt19937 g(rd());
-        std::shuffle(indices.begin(), indices.end(), g); // Shuffle indices randomly
-
-        std::vector<std::vector<std::string>> train_tokenized_docs;
-        std::vector<std::string> train_labels;
-        std::vector<std::vector<std::string>> validation_tokenized_docs;
-        std::vector<std::string> validation_labels;
-
-        train_tokenized_docs.reserve(train_size);
-        train_labels.reserve(train_size);
-        validation_tokenized_docs.reserve(validation_size);
-        validation_labels.reserve(validation_size);
-
-        for (size_t i = 0; i < train_size; ++i) {
-            train_tokenized_docs.push_back(all_tokenized_docs[indices[i]]);
-            train_labels.push_back(all_labels[indices[i]]);
-        }
-        for (size_t i = train_size; i < total_samples; ++i) {
-            validation_tokenized_docs.push_back(all_tokenized_docs[indices[i]]);
-            validation_labels.push_back(all_labels[indices[i]]);
-        }
-
-        std::cout << "Split data: " << train_size << " training, " << validation_size << " validation samples." << std::endl;
-
-
-        // --- 4. Feature Extraction ---
-        std::cout << "Building vocabulary and extracting features..." << std::endl;
-        sentiment::FeatureExtractor feature_extractor;
-        feature_extractor.buildVocabulary(train_tokenized_docs); // Build vocab ONLY on training data
-        size_t vocab_size = feature_extractor.getVocabularySize();
-         std::cout << "Vocabulary size: " << vocab_size << std::endl;
-         if (vocab_size == 0) {
-            std::cerr << "Error: Vocabulary size is 0. Check training data or preprocessing." << std::endl;
-            return 1;
-         }
-
-
-        std::vector<sentiment::FeatureExtractor::FeatureVector> train_features;
-        train_features.reserve(train_size);
-        for (const auto& doc_tokens : train_tokenized_docs) {
-            train_features.push_back(feature_extractor.extractFeatures(doc_tokens));
-        }
-
-        std::vector<sentiment::FeatureExtractor::FeatureVector> validation_features;
-         if (validation_size > 0) {
-            validation_features.reserve(validation_size);
-            for (const auto& doc_tokens : validation_tokenized_docs) {
-                validation_features.push_back(feature_extractor.extractFeatures(doc_tokens));
-            }
-         }
-        std::cout << "Feature extraction complete." << std::endl;
-
-        // --- 5. Model Training ---
-        std::cout << "Training Naive Bayes classifier..." << std::endl;
-        sentiment::NaiveBayesClassifier classifier(1.0); // Using Laplace smoothing alpha=1.0
-        classifier.train(train_features, train_labels, vocab_size);
-        std::cout << "Training complete. Model trained on classes: ";
-        const auto& trained_classes = classifier.getClasses();
-        for(size_t i = 0; i < trained_classes.size(); ++i) {
-            std::cout << trained_classes[i] << (i == trained_classes.size() - 1 ? "" : ", ");
-        }
-        std::cout << std::endl;
-
-
-        // --- 6. Evaluation ---
-        if (validation_size > 0) {
-            std::cout << "Evaluating model on validation set..." << std::endl;
-            int correct_predictions = 0;
-            for (size_t i = 0; i < validation_size; ++i) {
-                std::string predicted_label = classifier.predict(validation_features[i]);
-                if (predicted_label == validation_labels[i]) {
-                    correct_predictions++;
-                }
-                // Optional: Print individual predictions for debugging
-                // std::cout << "  Doc " << i << ": Actual='" << validation_labels[i]
-                //           << "', Predicted='" << predicted_label << "'" << std::endl;
-            }
-
-            double accuracy = static_cast<double>(correct_predictions) / validation_size;
-            std::cout << "----------------------------------------" << std::endl;
-            std::cout << "Evaluation Results (Validation Set):" << std::endl;
-            std::cout << "  Correct Predictions: " << correct_predictions << " / " << validation_size << std::endl;
-            std::cout << "  Accuracy: " << std::fixed << std::setprecision(4) << accuracy * 100.0 << "%" << std::endl;
-            std::cout << "----------------------------------------" << std::endl;
-        } else {
-             std::cout << "Skipping evaluation as validation set size is 0." << std::endl;
-        }
-
-
-        // --- 7. Command-Line Inference ---
-        std::cout << "\n--- Interactive Sentiment Analysis ---" << std::endl;
-        std::string input_text;
-        while (true) {
-            std::cout << "Enter text to classify (or press Enter to quit): ";
-            std::getline(std::cin, input_text);
-
-            if (input_text.empty()) {
-                break;
-            }
-
-            // Preprocess the input text
-            auto tokens = preprocessor.process(input_text);
-
-            // Extract features using the *trained* vocabulary
-            auto features = feature_extractor.extractFeatures(tokens);
-
-            // Predict using the *trained* classifier
-            std::string prediction = classifier.predict(features);
-
-            std::cout << "  -> Predicted Sentiment: " << prediction << std::endl;
-        }
-
-        std::cout << "Exiting." << std::endl;
-
-    } catch (const std::exception& e) {
-        std::cerr << "An error occurred: " << e.what() << std::endl;
+    // 3. Model Training
+    std::cout << "\n--- Step 3: Model Training ---\n";
+    NaiveBayes model(1.0); // Alpha = 1.0 (Laplace smoothing)
+    bool trainSuccess = model.train(trainFeatures);
+    if (!trainSuccess) {
+        std::cerr << "Error: Failed to train model" << std::endl;
         return 1;
+    }
+
+    // 4. Evaluation
+    std::cout << "\n--- Step 4: Evaluation ---\n";
+    Evaluator evaluator(model);
+    EvaluationMetrics metrics = evaluator.evaluate(validFeatures);
+    evaluator.printResults();
+
+    // Print execution time
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+        endTime - startTime).count();
+    std::cout << "Total execution time: " << duration / 1000.0 << " seconds\n";
+
+    // 5. Interactive mode (if requested)
+    if (args.count("interactive") > 0) {
+        runInteractiveMode(preprocessor, featureExtractor, model);
+    } else {
+        std::cout << "\nRun with --interactive flag to test the model with custom input\n";
     }
 
     return 0;
