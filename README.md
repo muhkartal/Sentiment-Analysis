@@ -180,9 +180,10 @@ text,sentiment
 
 ## Architecture
 
+<!--
 <div align="center">
   <img src="https://via.placeholder.com/800x250?text=NLP+Pipeline+Architecture" alt="Architecture Diagram" width="80%">
-</div>
+</div> -->
 
 The system follows a modular pipeline architecture with clear separation of concerns:
 
