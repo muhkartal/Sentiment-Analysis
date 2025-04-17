@@ -1,27 +1,93 @@
 cmake_minimum_required(VERSION 3.10)
+project(sentiment_analyzer VERSION 1.0.0 LANGUAGES CXX)
 
-# Find GTest package
-find_package(GTest REQUIRED)
-include_directories(${GTEST_INCLUDE_DIRS})
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Add the test executable
-add_executable(sentiment_tests
-    test_preprocessor.cpp
-    test_data_loader.cpp
-    test_feature_extractor.cpp
-    test_naive_bayes.cpp
+# Set compiler warnings
+if(MSVC)
+    add_compile_options(/W4)
+else()
+    add_compile_options(-Wall -Wextra -pedantic)
+endif()
+
+# Define library sources
+set(LIB_SOURCES
+    src/data_loader.cpp
+    src/preprocessor.cpp
+    src/feature_extractor.cpp
+    src/naive_bayes.cpp
+    src/evaluator.cpp
+    src/utils.cpp
+    src/sentiment_api.cpp
 )
 
-# Link against Google Test and project libraries
-target_link_libraries(sentiment_tests
-    ${GTEST_LIBRARIES}
-    pthread
+# Create library target
+add_library(sentiment_lib STATIC ${LIB_SOURCES})
+set_target_properties(sentiment_lib PROPERTIES OUTPUT_NAME "sentiment")
+
+# Set include directories for the library
+target_include_directories(sentiment_lib PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-# Include the project's include directory
-target_include_directories(sentiment_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/include
+# Main executable
+add_executable(sentiment_analyzer src/main.cpp)
+
+# Link the main executable with the library
+target_link_libraries(sentiment_analyzer PRIVATE sentiment_lib)
+
+# Create API example executable
+add_executable(api_example examples/api_example.cpp)
+target_link_libraries(api_example PRIVATE sentiment_lib)
+
+# Copy data files to build directory
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/ DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/data/)
+
+# Installation
+install(TARGETS sentiment_analyzer DESTINATION bin)
+install(TARGETS sentiment_lib DESTINATION lib)
+install(DIRECTORY include/ DESTINATION include/sentiment
+        FILES_MATCHING PATTERN "*.h")
+
+# Create package configuration files
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/sentimentConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
 )
 
-# Add test to be run with CTest
-add_test(NAME sentiment_tests COMMAND sentiment_tests)
+# Config file
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/sentimentConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/sentimentConfig.cmake"
+    INSTALL_DESTINATION lib/cmake/sentiment
+)
+
+# Install package configuration files
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/sentimentConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/sentimentConfigVersion.cmake"
+    DESTINATION lib/cmake/sentiment
+)
+
+# Install targets configuration
+install(EXPORT sentimentTargets
+    FILE sentimentTargets.cmake
+    NAMESPACE sentiment::
+    DESTINATION lib/cmake/sentiment
+)
+
+# Optional: Enable testing
+option(BUILD_TESTS "Build the tests" OFF)
+
+if(BUILD_TESTS)
+    # Enable CTest
+    enable_testing()
+
+    # Add the tests subdirectory
+    add_subdirectory(tests)
+endif()
